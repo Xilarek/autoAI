@@ -1,34 +1,31 @@
-from pydantic_settings import BaseSettings
 from typing import List
 
+from pydantic_settings import BaseSettings
+
+
 class Settings(BaseSettings):
-    # Database
-    POSTGRES_DB: str
-    POSTGRES_USER: str
-    POSTGRES_PASSWORD: str
-    DATABASE_URL: str
-    
-    # Redis
-    REDIS_URL: str
-    
-    # Security
-    SECRET_KEY: str
-    ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
-    
-    # CORS
-    CORS_ORIGINS: List[str]
-    
-    # YandexGPT
-    YANDEX_GPT_API_KEY: str = ""
-    YC_FOLDER_ID: str = ""
-    
-    # App
     APP_NAME: str = "AutoAI"
     DEBUG: bool = False
-    
+
+    # Database
+    DATABASE_URL: str = "postgresql+asyncpg://autoai:autoai@postgres:5432/autoai"
+
+    # Redis
+    REDIS_URL: str = "redis://redis:6379/0"
+
+    # CORS
+    CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:8000"]
+
+    # API Security
+    API_KEY: str = "change-me-in-production"
+
+    # YandexGPT (опционально)
+    YANDEX_GPT_API_KEY: str = ""
+    YC_FOLDER_ID: str = ""
+
     class Config:
         env_file = ".env"
         case_sensitive = True
+
 
 settings = Settings()

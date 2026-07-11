@@ -1,3 +1,5 @@
+# Docker
+docker-compose.override.yml
 
 # Environment
 .env
@@ -44,6 +46,10 @@ yarn-error.log*
 # Temporary files
 *.tmp
 *.temp
-drom_debug.html
-avito_debug.html
-EOF
+*_debug.html
+*.pyc
+
+# Test
+.pytest_cache/
+.coverage
+htmlcov/

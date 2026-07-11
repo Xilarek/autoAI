@@ -1,19 +1,20 @@
-from logging.config import fileConfig
-from sqlalchemy import engine_from_config
-from sqlalchemy import pool
-from alembic import context
 import asyncio
-from sqlalchemy.ext.asyncio import create_async_engine
 import sys
+from logging.config import fileConfig
 from pathlib import Path
+
+from alembic import context
+from sqlalchemy import engine_from_config, pool
+from sqlalchemy.ext.asyncio import create_async_engine
 
 # Добавляем корень backend в путь для импортов
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from app.models import car_listing, search_request, user
+
 # Импорт конфигурации и моделей
 from app.core.config import settings
 from app.core.database import Base
-from app.models import user, car_listing, search_request
 
 # Alembic Config object
 config = context.config

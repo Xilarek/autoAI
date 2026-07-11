@@ -1,9 +1,11 @@
+from app.models.search_request import SearchRequest
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.core.database import get_db
-from app.models.search_request import SearchRequest
 
 router = APIRouter()
+
 
 @router.post("/smart")
 async def smart_search(query: str, db: AsyncSession = Depends(get_db)):

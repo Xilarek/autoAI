@@ -1,4 +1,5 @@
 from celery import Celery
+
 from app.core.config import settings
 
 # Инициализация Celery
@@ -6,7 +7,7 @@ celery_app = Celery(
     "autoai",
     broker=settings.REDIS_URL,
     backend=settings.REDIS_URL,
-    include=["app.tasks.ai_tasks", "app.tasks.parse_tasks"]
+    include=["app.tasks.ai_tasks", "app.tasks.parse_tasks"],
 )
 
 # Конфигурация Celery

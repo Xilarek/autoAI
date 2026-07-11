@@ -1,6 +1,8 @@
-from sqlalchemy import Column, Integer, String, JSON, DateTime, ForeignKey, Text
+from sqlalchemy import JSON, Column, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.sql import func
+
 from app.core.database import Base
+
 
 class SearchRequest(Base):
     __tablename__ = "search_requests"

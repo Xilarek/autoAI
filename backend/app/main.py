@@ -1,7 +1,8 @@
+from app.api.v1 import ai_analysis, cars, parsers, search
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
 from app.core.config import settings
-from app.api.v1 import cars, search, ai_analysis, parsers
 
 app = FastAPI(title="AutoAI", version="0.1.0")
 
@@ -18,14 +19,12 @@ app.include_router(search.router, prefix="/api/v1/search", tags=["search"])
 app.include_router(ai_analysis.router, prefix="/api/v1/ai", tags=["ai"])
 app.include_router(parsers.router, prefix="/api/v1/parsers", tags=["parsers"])
 
+
 @app.get("/health")
 async def health():
     return {"status": "ok", "version": "0.1.0"}
 
+
 @app.get("/")
 async def root():
-    return {
-        "message": "AutoAI API",
-        "docs": "/docs",
-        "health": "/health"
-    }
+    return {"message": "AutoAI API", "docs": "/docs", "health": "/health"}
