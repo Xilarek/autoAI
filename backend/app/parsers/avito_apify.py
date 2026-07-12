@@ -1,4 +1,4 @@
-"""Парсер Дрома через Apify"""
+"""Парсер Авито через Apify"""
 
 from typing import List, Dict, Any
 import httpx
@@ -9,65 +9,81 @@ import re
 from app.core.logger import setup_logger
 from app.core.config import settings
 from app.core.exceptions import (
-    ParserError,
-    ParserTimeoutError, ParserUnavailableError, ParserBlockedError,
-    ParserEmptyResultError, ApifyAPIError
-
+    ParserError, ParserTimeoutError, ParserUnavailableError,
+    ParserBlockedError, ParserEmptyResultError, ApifyAPIError
 )
 
 logger = setup_logger(__name__)
 
 
-class DromApifyParser:
-    """Парсер Дрома через Apify API"""
+class AvitoApifyParser:
+    """Парсер Авито через Apify API"""
     
     ACTORS = [
         "apify~website-content-crawler",
         "apify~web-scraper",
-        "apify~cheerio-scraper",
     ]
     
     REGION_MAP = {
-        "moscow": "moscow", "москва": "moscow",
-        "spb": "saint-petersburg", "санкт-петербург": "saint-petersburg",
-        "новосибирск": "novosibirsk", "екатеринбург": "ekaterinburg",
-        "казань": "kazan", "нижний новгород": "nizhniy-novgorod",
-        "самара": "samara", "ростов": "rostov-na-donu",
-        "краснодар": "krasnodar", "воронеж": "voronezh",
-        "уфа": "ufa", "челябинск": "chelyabinsk",
-        "омск": "omsk", "пермь": "perm",
-        "волгоград": "volgograd", "тюмень": "tyumen",
-        "красноярск": "krasnoyarsk", "саратов": "saratov",
-        "владивосток": "vladivostok", "ярославль": "yaroslavl",
-        "хабаровск": "khabarovsk", "тольятти": "tolyatti",
-        "ижевск": "izhevsk", "барнаул": "barnaul",
-        "ульяновск": "ulyanovsk", "томск": "tomsk",
-        "рязань": "ryazan", "кемерово": "kemerovo",
-        "пенза": "penza", "астрахань": "astrakhan",
-        "липецк": "lipetsk", "тула": "tula",
-        "киров": "kirov", "чебоксары": "cheboksary",
-        "калининград": "kaliningrad", "брянск": "bryansk",
-        "курск": "kursk", "ставрополь": "stavropol",
-        "тверь": "tver", "иваново": "ivanovo",
-        "белгород": "belgorod", "архангельск": "arkhangelsk",
-        "сочи": "sochi", "оренбург": "orenburg",
-        "набережные челны": "naberezhnye-chelny",
-        "магнитогорск": "magnitogorsk",
+        "moscow": "moskva",
+        "москва": "moskva",
+        "spb": "sankt-peterburg",
+        "санкт-петербург": "sankt-peterburg",
+        "новосибирск": "novosibirsk",
+        "екатеринбург": "ekaterinburg",
+        "казань": "kazan",
+        "нижний новгород": "nizhniy_novgorod",
+        "самара": "samara",
+        "ростов": "rostov-na-donu",
+        "краснодар": "krasnodar",
+        "воронеж": "voronezh",
+        "уфа": "ufa",
+        "челябинск": "chelyabinsk",
+        "омск": "omsk",
+        "пермь": "perm",
+        "волгоград": "volgograd",
+        "тюмень": "tyumen",
+        "красноярск": "krasnoyarsk",
+        "саратов": "saratov",
+        "владивосток": "vladivostok",
+        "ярославль": "yaroslavl",
+        "хабаровск": "khabarovsk",
+        "тольятти": "tolyatti",
+        "ижевск": "izhevsk",
+        "барнаул": "barnaul",
+        "ульяновск": "ulyanovsk",
+        "томск": "tomsk",
+        "рязань": "ryazan",
+        "кемерово": "kemerovo",
+        "пенза": "penza",
+        "астрахань": "astrakhan",
+        "липецк": "lipetsk",
+        "тула": "tula",
+        "киров": "kirov",
+        "чебоксары": "cheboksary",
+        "калининград": "kaliningrad",
+        "брянск": "bryansk",
+        "курск": "kursk",
+        "ставрополь": "stavropol",
+        "тверь": "tver",
+        "иваново": "ivanovo",
+        "белгород": "belgorod",
+        "архангельск": "arkhangelsk",
+        "сочи": "sochi",
+        "оренбург": "orenburg",
     }
     
     async def parse_search(self, params: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Парсинг через Apify с обработкой ошибок"""
+        """Парсинг через Apify"""
         
-        # Проверка токена
         if not settings.APIFY_TOKEN:
-            logger.error("❌ APIFY_TOKEN не установлен в .env")
             raise ParserUnavailableError(
                 "Apify API token not configured",
                 "Please set APIFY_TOKEN in .env file"
             )
         
         search_url = self._build_search_url(params)
-        logger.info(f"🔗 Apify парсинг Дрома: {search_url}")
+        logger.info(f"🔗 Apify парсинг Авито: {search_url}")
         
         try:
             run_id = await self._start_actor_run(search_url)
@@ -88,7 +104,7 @@ class DromApifyParser:
             
             logger.info(f"📦 Получено {len(result)} элементов от Apify")
             
-            with open("/tmp/apify_debug.json", "w", encoding="utf-8") as f:
+            with open("/tmp/avito_apify_debug.json", "w", encoding="utf-8") as f:
                 json.dump(result, f, ensure_ascii=False, indent=2)
             
             listings = self._transform_results(result)
@@ -103,42 +119,15 @@ class DromApifyParser:
             return listings
             
         except httpx.TimeoutException as e:
-            logger.error(f"⏱️ Таймаут запроса к Apify: {e}")
-            raise ParserTimeoutError(
-                "Apify request timeout",
-                "The service took too long to respond"
-            )
+            raise ParserTimeoutError("Apify request timeout", str(e))
         except httpx.ConnectError as e:
-            logger.error(f"🔌 Ошибка подключения к Apify: {e}")
-            raise ParserUnavailableError(
-                "Cannot connect to Apify",
-                "Service may be down"
-            )
-        except httpx.HTTPStatusError as e:
-            if e.response.status_code == 429:
-                raise ParserBlockedError(
-                    "Apify rate limit exceeded",
-                    "Too many requests, please try later"
-                )
-            elif e.response.status_code in [401, 403]:
-                raise ParserBlockedError(
-                    "Apify authentication failed",
-                    "Check your API token"
-                )
-            else:
-                raise ApifyAPIError(
-                    f"Apify HTTP error: {e.response.status_code}",
-                    e.response.text[:500]
-                )
+            raise ParserUnavailableError("Cannot connect to Apify", str(e))
         except (ParserTimeoutError, ParserUnavailableError, 
                 ParserBlockedError, ParserEmptyResultError, ApifyAPIError):
             raise
         except Exception as e:
             logger.error(f"❌ Неизвестная ошибка парсера: {e}", exc_info=True)
-            raise ParserError(
-                "Unexpected parser error",
-                str(e)
-            )
+            raise ParserError("Unexpected parser error", str(e))
     
     async def _start_actor_run(self, url: str) -> str:
         """Запускаем актор на выполнение"""
@@ -171,16 +160,12 @@ class DromApifyParser:
                         logger.info(f"✅ Актор {actor_id} запущен: {run_id}")
                         return run_id
                     
-                    logger.warning(f"❌ {actor_id}: {response.status_code} - {response.text[:300]}")
+                    logger.warning(f"❌ {actor_id}: {response.status_code}")
                     
-                except httpx.TimeoutException:
-                    logger.warning(f"⏱️ Таймаут при запуске {actor_id}")
-                    continue
                 except Exception as e:
                     logger.warning(f"❌ Ошибка при запуске {actor_id}: {e}")
                     continue
             
-            logger.error("❌ Все акторы не сработали")
             return ""
     
     async def _wait_for_result(self, run_id: str, max_wait: int = 180) -> List[Dict]:
@@ -195,7 +180,6 @@ class DromApifyParser:
                     )
                     
                     if response.status_code != 200:
-                        logger.error(f"Ошибка получения статуса: {response.status_code}")
                         return []
                     
                     data = response.json()
@@ -208,19 +192,14 @@ class DromApifyParser:
                     
                     if status in ["FAILED", "ABORTED", "TIMED-OUT"]:
                         logger.error(f"❌ Актор завершился с ошибкой: {status}")
-                        status_msg = data["data"].get("statusMessage", "")
-                        if status_msg:
-                            logger.error(f"❌ Сообщение: {status_msg}")
                         return []
                     
                     logger.info(f"⏳ Статус: {status}, ждём... ({i*3}с)")
                     await asyncio.sleep(3)
                     
                 except httpx.TimeoutException:
-                    logger.warning(f"⏱️ Таймаут при проверке статуса (попытка {i})")
                     continue
             
-            logger.error("⏱️ Таймаут ожидания результата")
             raise ParserTimeoutError(
                 "Actor execution timeout",
                 f"Actor {run_id} did not complete in {max_wait} seconds"
@@ -244,7 +223,6 @@ class DromApifyParser:
                 logger.info(f"📦 Получено {len(items)} элементов из датасета")
                 return items
             
-            logger.error(f"Ошибка получения датасета: {response.status_code}")
             return []
     
     def _transform_results(self, items: List[Dict]) -> List[Dict[str, Any]]:
@@ -257,26 +235,18 @@ class DromApifyParser:
                 crawl = item.get("crawl", {})
                 http_status = crawl.get("httpStatusCode", 0)
                 
-                if http_status == 404:
-                    logger.warning(f"❌ Страница вернула 404: {item.get('url')}")
-                    continue
-                
-                if http_status == 403:
-                    logger.warning(f"🚫 Страница заблокирована: {item.get('url')}")
-                    continue
-                
-                if http_status != 200:
+                if http_status not in [200, 0]:
                     logger.warning(f"⚠️ Страница вернула статус {http_status}")
                     continue
                 
-                # Метод 1: JSON-LD (самый надёжный)
+                # Метод 1: JSON-LD
                 jsonld_listings = self._extract_from_jsonld(item)
                 if jsonld_listings:
                     logger.info(f"🎯 Извлечено {len(jsonld_listings)} объявлений из JSON-LD")
                     all_listings.extend(jsonld_listings)
                     continue
                 
-                # Метод 2: Markdown (fallback)
+                # Метод 2: Markdown
                 markdown_listings = self._extract_from_markdown(item)
                 if markdown_listings:
                     logger.info(f"📝 Извлечено {len(markdown_listings)} объявлений из markdown")
@@ -289,7 +259,7 @@ class DromApifyParser:
         return all_listings
     
     def _extract_from_jsonld(self, item: Dict) -> List[Dict[str, Any]]:
-        """Извлекаем объявления из JSON-LD метаданных"""
+        """Извлекаем объявления из JSON-LD"""
         
         metadata = item.get("metadata", {})
         jsonld = metadata.get("jsonLd", [])
@@ -342,7 +312,7 @@ class DromApifyParser:
         external_id = self._generate_external_id(brand, model, year, price, 0, url)
         
         return {
-            "source": "drom",
+            "source": "avito",
             "external_id": external_id,
             "url": url,
             "brand": brand,
@@ -381,13 +351,13 @@ class DromApifyParser:
     def _extract_region_from_url(self, url: str) -> str:
         """Извлекаем регион из URL"""
         
-        match = re.search(r'auto\.drom\.ru/([a-z-]+)/', url)
+        match = re.search(r'avito\.ru/([a-z_]+)/', url)
         if match:
             region_slug = match.group(1)
             for ru_name, slug in self.REGION_MAP.items():
                 if slug == region_slug:
                     return ru_name.capitalize()
-            return region_slug.capitalize()
+            return region_slug.replace('_', ' ').capitalize()
         
         return ""
     
@@ -499,7 +469,7 @@ class DromApifyParser:
             transmission = "робот"
         
         url = ""
-        url_match = re.search(r'https://auto\.drom\.ru/\S+/\d+\.html', block)
+        url_match = re.search(r'https://www\.avito\.ru/\S+/\d+', block)
         if url_match:
             url = url_match.group(0)
         
@@ -511,7 +481,7 @@ class DromApifyParser:
         external_id = self._generate_external_id(brand, model, year, price, mileage, url)
         
         return {
-            "source": "drom",
+            "source": "avito",
             "external_id": external_id,
             "url": url,
             "brand": brand.capitalize(),
@@ -531,37 +501,33 @@ class DromApifyParser:
         }
     
     def _build_search_url(self, params: Dict[str, Any]) -> str:
-        """Формируем URL поиска"""
+        """Формируем URL поиска для Авито"""
         
         query = params.get("query", "").lower().strip()
         region = params.get("region", "moscow").lower().strip()
         
-        region_slug = self.REGION_MAP.get(region, region.replace(' ', '-'))
+        region_slug = self.REGION_MAP.get(region, region.replace(' ', '_'))
         
-        if not query:
-            base_url = f"https://auto.drom.ru/{region_slug}/"
-        else:
-            parts = query.split()
-            
-            if len(parts) >= 2:
-                brand, model = parts[0], parts[1]
-                base_url = f"https://auto.drom.ru/{region_slug}/{brand}/{model}/"
-            elif len(parts) == 1:
-                brand = parts[0]
-                base_url = f"https://auto.drom.ru/{region_slug}/{brand}/"
-            else:
-                base_url = f"https://auto.drom.ru/{region_slug}/"
+        base_url = f"https://www.avito.ru/{region_slug}/avtomobili"
         
         query_params = []
         
+        if query:
+            parts = query.split()
+            if len(parts) >= 2:
+                brand, model = parts[0], parts[1]
+                query_params.append(f"q={brand}+{model}")
+            elif len(parts) == 1:
+                query_params.append(f"q={parts[0]}")
+        
         if params.get("year_min"):
-            query_params.append(f"minyear={params['year_min']}")
+            query_params.append(f"year_min={params['year_min']}")
         if params.get("year_max"):
-            query_params.append(f"maxyear={params['year_max']}")
+            query_params.append(f"year_max={params['year_max']}")
         if params.get("price_min"):
-            query_params.append(f"minprice={params['price_min']}")
+            query_params.append(f"price_min={params['price_min']}")
         if params.get("price_max"):
-            query_params.append(f"maxprice={params['price_max']}")
+            query_params.append(f"price_max={params['price_max']}")
         
         if query_params:
             base_url += "?" + "&".join(query_params)
@@ -573,11 +539,11 @@ class DromApifyParser:
         """Детерминированный ID"""
         if url:
             hash_value = hashlib.md5(url.encode()).hexdigest()[:12]
-            return f"drom_{hash_value}"
+            return f"avito_{hash_value}"
         
         data = f"{brand}_{model}_{year}_{price}_{mileage}"
         hash_value = hashlib.md5(data.encode()).hexdigest()[:12]
-        return f"drom_{hash_value}"
+        return f"avito_{hash_value}"
     
     async def parse_listing(self, url: str) -> Dict[str, Any]:
         """Парсинг отдельного объявления"""
