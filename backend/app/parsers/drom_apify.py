@@ -1,18 +1,16 @@
 """Парсер Дрома через Apify"""
 
 from typing import List, Dict, Any
-import httpx
 import hashlib
 import json
 import asyncio
 import re
 from app.core.logger import setup_logger
 from app.core.config import settings
+from app.core.http_client import get_http_client
 from app.core.exceptions import (
-    ParserError,
-    ParserTimeoutError, ParserUnavailableError, ParserBlockedError,
-    ParserEmptyResultError, ApifyAPIError
-
+    ParserError, ParserTimeoutError, ParserUnavailableError,
+    ParserBlockedError, ParserEmptyResultError, ApifyAPIError
 )
 
 logger = setup_logger(__name__)
@@ -58,9 +56,7 @@ class DromApifyParser:
     async def parse_search(self, params: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Парсинг через Apify с обработкой ошибок"""
         
-        # Проверка токена
         if not settings.APIFY_TOKEN:
-            logger.error("❌ APIFY_TOKEN не установлен в .env")
             raise ParserUnavailableError(
                 "Apify API token not configured",
                 "Please set APIFY_TOKEN in .env file"
@@ -102,150 +98,119 @@ class DromApifyParser:
             logger.info(f"✅ После трансформации: {len(listings)} объявлений")
             return listings
             
-        except httpx.TimeoutException as e:
-            logger.error(f"⏱️ Таймаут запроса к Apify: {e}")
-            raise ParserTimeoutError(
-                "Apify request timeout",
-                "The service took too long to respond"
-            )
-        except httpx.ConnectError as e:
-            logger.error(f"🔌 Ошибка подключения к Apify: {e}")
-            raise ParserUnavailableError(
-                "Cannot connect to Apify",
-                "Service may be down"
-            )
-        except httpx.HTTPStatusError as e:
-            if e.response.status_code == 429:
-                raise ParserBlockedError(
-                    "Apify rate limit exceeded",
-                    "Too many requests, please try later"
-                )
-            elif e.response.status_code in [401, 403]:
-                raise ParserBlockedError(
-                    "Apify authentication failed",
-                    "Check your API token"
-                )
-            else:
-                raise ApifyAPIError(
-                    f"Apify HTTP error: {e.response.status_code}",
-                    e.response.text[:500]
-                )
         except (ParserTimeoutError, ParserUnavailableError, 
                 ParserBlockedError, ParserEmptyResultError, ApifyAPIError):
             raise
         except Exception as e:
             logger.error(f"❌ Неизвестная ошибка парсера: {e}", exc_info=True)
-            raise ParserError(
-                "Unexpected parser error",
-                str(e)
-            )
+            raise ParserError("Unexpected parser error", str(e))
     
     async def _start_actor_run(self, url: str) -> str:
         """Запускаем актор на выполнение"""
         
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            for actor_id in self.ACTORS:
-                logger.info(f"🚀 Пробуем актор: {actor_id}")
-                
-                run_input = {
-                    "startUrls": [{"url": url}],
-                    "crawlerType": "playwright:firefox",
-                    "maxCrawlDepth": 0,
-                    "maxCrawlPages": 1,
-                    "maxResults": 50,
-                    "waitUntil": {"event": "networkidle", "timeout": 30000},
-                }
-                
-                try:
-                    response = await client.post(
-                        f"https://api.apify.com/v2/acts/{actor_id}/runs",
-                        params={"token": settings.APIFY_TOKEN},
-                        json=run_input
-                    )
-                    
-                    logger.info(f"📡 {actor_id}: статус {response.status_code}")
-                    
-                    if response.status_code == 201:
-                        data = response.json()
-                        run_id = data["data"]["id"]
-                        logger.info(f"✅ Актор {actor_id} запущен: {run_id}")
-                        return run_id
-                    
-                    logger.warning(f"❌ {actor_id}: {response.status_code} - {response.text[:300]}")
-                    
-                except httpx.TimeoutException:
-                    logger.warning(f"⏱️ Таймаут при запуске {actor_id}")
-                    continue
-                except Exception as e:
-                    logger.warning(f"❌ Ошибка при запуске {actor_id}: {e}")
-                    continue
+        client = get_http_client()
+        
+        for actor_id in self.ACTORS:
+            logger.info(f"🚀 Пробуем актор: {actor_id}")
             
-            logger.error("❌ Все акторы не сработали")
-            return ""
+            run_input = {
+                "startUrls": [{"url": url}],
+                "crawlerType": "playwright:firefox",
+                "maxCrawlDepth": 0,
+                "maxCrawlPages": 1,
+                "maxResults": 50,
+                "waitUntil": {"event": "networkidle", "timeout": 30000},
+            }
+            
+            try:
+                response = await client.post(
+                    f"https://api.apify.com/v2/acts/{actor_id}/runs",
+                    params={"token": settings.APIFY_TOKEN},
+                    json=run_input
+                )
+                
+                logger.info(f"📡 {actor_id}: статус {response.status_code}")
+                
+                if response.status_code == 201:
+                    data = response.json()
+                    run_id = data["data"]["id"]
+                    logger.info(f"✅ Актор {actor_id} запущен: {run_id}")
+                    return run_id
+                
+                logger.warning(f"❌ {actor_id}: {response.status_code} - {response.text[:300]}")
+                
+            except Exception as e:
+                logger.warning(f"❌ Ошибка при запуске {actor_id}: {e}")
+                continue
+        
+        logger.error("❌ Все акторы не сработали")
+        return ""
     
     async def _wait_for_result(self, run_id: str, max_wait: int = 180) -> List[Dict]:
         """Ждём завершения выполнения актора"""
         
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            for i in range(max_wait // 3):
-                try:
-                    response = await client.get(
-                        f"https://api.apify.com/v2/actor-runs/{run_id}",
-                        params={"token": settings.APIFY_TOKEN}
-                    )
-                    
-                    if response.status_code != 200:
-                        logger.error(f"Ошибка получения статуса: {response.status_code}")
-                        return []
-                    
-                    data = response.json()
-                    status = data["data"]["status"]
-                    
-                    if status == "SUCCEEDED":
-                        dataset_id = data["data"]["defaultDatasetId"]
-                        logger.info(f"✅ Актор завершён. Dataset: {dataset_id}")
-                        return await self._get_dataset_items(dataset_id)
-                    
-                    if status in ["FAILED", "ABORTED", "TIMED-OUT"]:
-                        logger.error(f"❌ Актор завершился с ошибкой: {status}")
-                        status_msg = data["data"].get("statusMessage", "")
-                        if status_msg:
-                            logger.error(f"❌ Сообщение: {status_msg}")
-                        return []
-                    
-                    logger.info(f"⏳ Статус: {status}, ждём... ({i*3}с)")
-                    await asyncio.sleep(3)
-                    
-                except httpx.TimeoutException:
-                    logger.warning(f"⏱️ Таймаут при проверке статуса (попытка {i})")
-                    continue
-            
-            logger.error("⏱️ Таймаут ожидания результата")
-            raise ParserTimeoutError(
-                "Actor execution timeout",
-                f"Actor {run_id} did not complete in {max_wait} seconds"
-            )
+        client = get_http_client()
+        
+        for i in range(max_wait // 3):
+            try:
+                response = await client.get(
+                    f"https://api.apify.com/v2/actor-runs/{run_id}",
+                    params={"token": settings.APIFY_TOKEN}
+                )
+                
+                if response.status_code != 200:
+                    logger.error(f"Ошибка получения статуса: {response.status_code}")
+                    return []
+                
+                data = response.json()
+                status = data["data"]["status"]
+                
+                if status == "SUCCEEDED":
+                    dataset_id = data["data"]["defaultDatasetId"]
+                    logger.info(f"✅ Актор завершён. Dataset: {dataset_id}")
+                    return await self._get_dataset_items(dataset_id)
+                
+                if status in ["FAILED", "ABORTED", "TIMED-OUT"]:
+                    logger.error(f"❌ Актор завершился с ошибкой: {status}")
+                    status_msg = data["data"].get("statusMessage", "")
+                    if status_msg:
+                        logger.error(f"❌ Сообщение: {status_msg}")
+                    return []
+                
+                logger.info(f"⏳ Статус: {status}, ждём... ({i*3}с)")
+                await asyncio.sleep(3)
+                
+            except Exception as e:
+                logger.warning(f"⏱️ Ошибка при проверке статуса: {e}")
+                await asyncio.sleep(3)
+                continue
+        
+        raise ParserTimeoutError(
+            "Actor execution timeout",
+            f"Actor {run_id} did not complete in {max_wait} seconds"
+        )
     
     async def _get_dataset_items(self, dataset_id: str) -> List[Dict]:
         """Получаем элементы из датасета"""
         
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.get(
-                f"https://api.apify.com/v2/datasets/{dataset_id}/items",
-                params={
-                    "token": settings.APIFY_TOKEN,
-                    "format": "json",
-                    "limit": 50
-                }
-            )
-            
-            if response.status_code == 200:
-                items = response.json()
-                logger.info(f"📦 Получено {len(items)} элементов из датасета")
-                return items
-            
-            logger.error(f"Ошибка получения датасета: {response.status_code}")
-            return []
+        client = get_http_client()
+        
+        response = await client.get(
+            f"https://api.apify.com/v2/datasets/{dataset_id}/items",
+            params={
+                "token": settings.APIFY_TOKEN,
+                "format": "json",
+                "limit": 50
+            }
+        )
+        
+        if response.status_code == 200:
+            items = response.json()
+            logger.info(f"📦 Получено {len(items)} элементов из датасета")
+            return items
+        
+        logger.error(f"Ошибка получения датасета: {response.status_code}")
+        return []
     
     def _transform_results(self, items: List[Dict]) -> List[Dict[str, Any]]:
         """Преобразуем результаты Apify в наш формат"""
@@ -269,14 +234,12 @@ class DromApifyParser:
                     logger.warning(f"⚠️ Страница вернула статус {http_status}")
                     continue
                 
-                # Метод 1: JSON-LD (самый надёжный)
                 jsonld_listings = self._extract_from_jsonld(item)
                 if jsonld_listings:
                     logger.info(f"🎯 Извлечено {len(jsonld_listings)} объявлений из JSON-LD")
                     all_listings.extend(jsonld_listings)
                     continue
                 
-                # Метод 2: Markdown (fallback)
                 markdown_listings = self._extract_from_markdown(item)
                 if markdown_listings:
                     logger.info(f"📝 Извлечено {len(markdown_listings)} объявлений из markdown")

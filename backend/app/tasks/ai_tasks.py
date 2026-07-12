@@ -1,71 +1,68 @@
-import asyncio
+"""Celery задачи для AI-анализа"""
 
-from app.models.car_listing import CarListing
-from app.services.car_listing_analyzer import CarListingAnalyzer
 from app.tasks.celery_app import celery_app
-from sqlalchemy import select
-
+from app.services.car_listing_analyzer import CarListingAnalyzer
 from app.core.database import SessionLocal
+from app.models.car_listing import CarListing
+from sqlalchemy import select
 from app.core.logger import setup_logger
+import asyncio
 
 logger = setup_logger(__name__)
 
 
 @celery_app.task(
     bind=True,
+    name="app.tasks.ai_tasks.run_deep_analysis",
     max_retries=3,
     retry_backoff=True,
     retry_backoff_max=600,
     retry_jitter=True,
-    name="app.tasks.ai_tasks.run_deep_analysis",
 )
 def run_deep_analysis(self, listing_id: int):
-    """AI-анализ объявления"""
+    """Запуск AI-анализа объявления"""
     try:
-
-        async def analyze():
+        async def run():
             db = SessionLocal()
             try:
-                result = db.execute(select(CarListing).where(CarListing.id == listing_id))
+                result = await db.execute(
+                    select(CarListing).where(CarListing.id == listing_id)
+                )
                 listing = result.scalar_one_or_none()
-
+                
                 if not listing:
-                    logger.warning(f"Объявление {listing_id} не найдено")
-                    return
-
-                listing_dict = {
+                    logger.error(f"Объявление {listing_id} не найдено")
+                    return {"status": "error", "message": "Listing not found"}
+                
+                analyzer = CarListingAnalyzer()
+                analysis = await analyzer.analyze_listing({
                     "brand": listing.brand,
                     "model": listing.model,
                     "year": listing.year,
-                    "mileage": listing.mileage or 0,
-                    "engine_volume": listing.engine_volume or 0,
-                    "fuel_type": listing.fuel_type or "",
-                    "transmission": listing.transmission or "",
-                    "region": listing.region or "",
-                    "price_rub": float(listing.price_rub) if listing.price_rub else 0,
+                    "price_rub": listing.price_rub,
+                    "mileage": listing.mileage,
                     "description": listing.description or "",
-                }
-
-                analyzer = CarListingAnalyzer()
-                analysis = await analyzer.analyze_listing(listing_dict)
-
-                listing.ai_summary = analysis.get("summary", "")
+                })
+                
+                listing.ai_summary = analysis.get("summary")
                 listing.ai_risks = analysis.get("risks", [])
-                listing.ai_verdict = analysis.get("verdict", "ТОРГОВАТЬСЯ")
-                listing.fair_price = analysis.get("market_price", 0)
-                listing.value_score = analysis.get("score", 0.5)
-
-                db.commit()
-
-                logger.info(f"✅ Анализ завершён: {listing.brand} {listing.model} -> {listing.ai_verdict}")
-                return analysis
-
+                listing.ai_verdict = analysis.get("verdict")
+                listing.fair_price = analysis.get("market_price")
+                
+                await db.commit()
+                
+                logger.info(f"✅ AI-анализ завершён для {listing_id}: {analysis.get('verdict')}")
+                return {"status": "completed", "verdict": analysis.get("verdict")}
+                
+            except Exception as e:
+                await db.rollback()
+                raise e
             finally:
                 db.close()
-
-        result = asyncio.run(analyze())
-        return {"status": "completed", "listing_id": listing_id, "result": result}
-
+        
+        result = asyncio.run(run())
+        return result
+        
     except Exception as exc:
-        logger.error(f"❌ Ошибка анализа {listing_id}: {exc}", exc_info=True)
-        raise self.retry(exc=exc)
+        logger.error(f"❌ Ошибка AI-анализа {listing_id}: {exc}", exc_info=True)
+        raise self.retry(exc=exc, countdown=60)

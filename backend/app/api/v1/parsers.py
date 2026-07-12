@@ -1,181 +1,106 @@
 """API endpoints для парсеров"""
 
-from fastapi import APIRouter, Depends, BackgroundTasks, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
+from celery.result import AsyncResult
 from app.core.database import get_db
-from app.parsers.drom_apify import DromApifyParser
-from app.parsers.avito_apify import AvitoApifyParser
-from app.services.listing_service import ListingService
 from app.schemas.search import SearchParams
 from app.core.rate_limit import limiter
-from app.core.exceptions import (
-    ParserError, ParserTimeoutError, ParserUnavailableError,
-    ParserBlockedError, ParserEmptyResultError, ApifyAPIError
-)
 from app.core.logger import setup_logger
+from app.core.exceptions import ParserError
 
 logger = setup_logger(__name__)
 router = APIRouter()
 
+
 @router.post("/drom/search")
 @limiter.limit("10/minute")
-async def search_drom(
-    request: Request,
-    params: SearchParams,
-    db: AsyncSession = Depends(get_db)
-):
-    """Поиск на Дроме через Apify"""
-    try:
-        parser = DromApifyParser()
-        listings = await parser.parse_search(params.dict())
-        
-        service = ListingService()
-        saved = await service.save_listings(db, listings)
-        
-        logger.info(f"Дром: найдено {len(saved)} объявлений")
-        
-        return {
-            "count": len(saved),
-            "listings": [
-                {
-                    "id": listing.id,
-                    "brand": listing.brand,
-                    "model": listing.model,
-                    "year": listing.year,
-                    "price": int(listing.price_rub) if listing.price_rub else 0,
-                    "url": listing.url
-                }
-                for listing in saved
-            ]
-        }
-    except ParserTimeoutError as e:
-        logger.error(f"⏱️ Таймаут парсера: {e.message}")
-        raise HTTPException(
-            status_code=504,
-            detail={
-                "error": "parser_timeout",
-                "message": e.message,
-                "details": e.details,
-                "retry_after": 60
-            }
-        )
-    except ParserUnavailableError as e:
-        logger.error(f"🔌 Парсер недоступен: {e.message}")
-        raise HTTPException(
-            status_code=503,
-            detail={
-                "error": "parser_unavailable",
-                "message": e.message,
-                "details": e.details
-            }
-        )
-    except ParserBlockedError as e:
-        logger.error(f"🚫 Парсер заблокирован: {e.message}")
-        raise HTTPException(
-            status_code=429,
-            detail={
-                "error": "parser_blocked",
-                "message": e.message,
-                "details": e.details,
-                "retry_after": 300
-            }
-        )
-    except ParserEmptyResultError as e:
-        logger.warning(f"📭 Пустой результат: {e.message}")
-        return {
-            "count": 0,
-            "listings": [],
-            "message": e.message,
-            "details": e.details
-        }
-    except ApifyAPIError as e:
-        logger.error(f"❌ Ошибка Apify API: {e.message}")
-        raise HTTPException(
-            status_code=502,
-            detail={
-                "error": "apify_api_error",
-                "message": e.message,
-                "details": e.details
-            }
-        )
-    except ParserError as e:
-        logger.error(f"❌ Ошибка парсера: {e.message}")
-        raise HTTPException(
-            status_code=500,
-            detail={
-                "error": "parser_error",
-                "message": e.message,
-                "details": e.details
-            }
-        )
-    except Exception as e:
-        logger.error(f"❌ Неизвестная ошибка: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail={
-                "error": "internal_error",
-                "message": "Unexpected error occurred",
-                "details": str(e)
-            }
-        )
+async def search_drom(request: Request, params: SearchParams):
+    """Запустить парсинг Дрома в фоне (асинхронно)"""
+    from app.tasks.parse_tasks import parse_drom_apify
+    
+    task = parse_drom_apify.delay(params.dict())
+    
+    logger.info(f"🚀 Запущен парсинг Дрома: task_id={task.id}")
+    
+    return {
+        "status": "queued",
+        "task_id": task.id,
+        "message": "Парсинг запущен в фоне. Используйте /tasks/{task_id} для получения результата."
+    }
+
 
 @router.post("/avito/search")
 @limiter.limit("10/minute")
-async def search_avito(
-    request: Request,
-    params: SearchParams,
-    db: AsyncSession = Depends(get_db)
-):
-    """Поиск на Авито через Apify"""
-    try:
-        parser = AvitoApifyParser()
-        listings = await parser.parse_search(params.dict())
-        
-        service = ListingService()
-        saved = await service.save_listings(db, listings)
-        
-        logger.info(f"Авито: найдено {len(saved)} объявлений")
-        
-        return {
-            "count": len(saved),
-            "listings": [
-                {
-                    "id": listing.id,
-                    "brand": listing.brand,
-                    "model": listing.model,
-                    "year": listing.year,
-                    "price": int(listing.price_rub) if listing.price_rub else 0,
-                    "url": listing.url
-                }
-                for listing in saved
-            ]
-        }
-    except ParserTimeoutError as e:
-        raise HTTPException(status_code=504, detail={"error": "parser_timeout", "message": e.message})
-    except ParserUnavailableError as e:
-        raise HTTPException(status_code=503, detail={"error": "parser_unavailable", "message": e.message})
-    except ParserBlockedError as e:
-        raise HTTPException(status_code=429, detail={"error": "parser_blocked", "message": e.message})
-    except ParserEmptyResultError as e:
-        return {"count": 0, "listings": [], "message": e.message}
-    except ParserError as e:
-        raise HTTPException(status_code=500, detail={"error": "parser_error", "message": e.message})
-    except Exception as e:
-        logger.error(f"❌ Неизвестная ошибка: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail={"error": "internal_error", "message": str(e)})
-
-@router.post("/drom/parse-task")
-@limiter.limit("5/minute")
-async def start_drom_parsing(request: Request, params: SearchParams, background_tasks: BackgroundTasks):
-    """Запустить парсинг Дрома в фоне"""
-    from app.tasks.parse_tasks import parse_drom_apify
-    task = parse_drom_apify.delay(params.dict())
-    return {"status": "queued", "task_id": task.id}
-
-@router.post("/avito/parse-task")
-@limiter.limit("5/minute")
-async def start_avito_parsing(request: Request, params: SearchParams, background_tasks: BackgroundTasks):
-    """Запустить парсинг Авито в фоне"""
+async def search_avito(request: Request, params: SearchParams):
+    """Запустить парсинг Авито в фоне (асинхронно)"""
     from app.tasks.parse_tasks import parse_avito_apify
+    
     task = parse_avito_apify.delay(params.dict())
-    return {"status": "queued", "task_id": task.id}
+    
+    logger.info(f"🚀 Запущен парсинг Авито: task_id={task.id}")
+    
+    return {
+        "status": "queued",
+        "task_id": task.id,
+        "message": "Парсинг запущен в фоне. Используйте /tasks/{task_id} для получения результата."
+    }
+
+
+@router.get("/tasks/{task_id}")
+async def get_task_status(task_id: str, db: AsyncSession = Depends(get_db)):
+    """Получить статус задачи парсинга"""
+    from sqlalchemy import select
+    from app.models.car_listing import CarListing
+    
+    result = AsyncResult(task_id)
+    
+    response = {
+        "task_id": task_id,
+        "status": result.status,  # PENDING, STARTED, SUCCESS, FAILURE, RETRY
+    }
+    
+    if result.status == "SUCCESS":
+        task_result = result.result
+        response["result"] = task_result
+        
+        # Получить свежие объявления из БД
+        db_result = await db.execute(
+            select(CarListing)
+            .where(CarListing.is_deleted == False)
+            .order_by(CarListing.id.desc())
+            .limit(task_result.get("count", 20))
+        )
+        listings = db_result.scalars().all()
+        
+        response["listings"] = [
+            {
+                "id": listing.id,
+                "brand": listing.brand,
+                "model": listing.model,
+                "year": listing.year,
+                "price": int(listing.price_rub) if listing.price_rub else 0,
+                "url": listing.url,
+                "source": listing.source,
+            }
+            for listing in listings
+        ]
+    
+    elif result.status == "FAILURE":
+        response["error"] = str(result.result)
+    
+    return response
+
+
+@router.get("/tasks")
+async def list_recent_tasks():
+    """Список последних задач (упрощённо)"""
+    from app.tasks.celery_app import celery_app
+    
+    inspector = celery_app.control.inspect()
+    
+    return {
+        "active": inspector.active() or {},
+        "scheduled": inspector.scheduled() or {},
+        "reserved": inspector.reserved() or {},
+    }

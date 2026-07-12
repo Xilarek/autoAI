@@ -15,6 +15,10 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 512M
 
   redis:
     image: redis:7-alpine
@@ -26,6 +30,10 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 256M
 
   backend:
     build: ./backend
@@ -40,18 +48,62 @@ services:
         condition: service_healthy
     volumes:
       - ./backend:/app
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    command: >
+      uvicorn app.main:app
+      --host 0.0.0.0
+      --port 8000
+      --workers 4
+      --loop uvloop
+      --http httptools
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '2.0'
 
   celery_worker:
     build: ./backend
     container_name: autoai_celery
-    command: celery -A app.tasks.celery_app worker -l info --pool=solo --max-tasks-per-child=100
+    command: >
+      celery -A app.tasks.celery_app worker
+      -l info
+      --pool=solo
+      --max-tasks-per-child=100
+      --concurrency=2
+      -Q celery,high_priority,default
     env_file: .env
     depends_on:
       - postgres
       - redis
     volumes:
       - ./backend:/app
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '2.0'
+
+  celery_worker_high:
+    build: ./backend
+    container_name: autoai_celery_high
+    command: >
+      celery -A app.tasks.celery_app worker
+      -l info
+      --pool=solo
+      --max-tasks-per-child=50
+      --concurrency=2
+      -Q celery,high_priority,default
+    env_file: .env
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - ./backend:/app
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
 
   flower:
     build: ./backend

@@ -1,13 +1,13 @@
 """Парсер Авито через Apify"""
 
 from typing import List, Dict, Any
-import httpx
 import hashlib
 import json
 import asyncio
 import re
 from app.core.logger import setup_logger
 from app.core.config import settings
+from app.core.http_client import get_http_client
 from app.core.exceptions import (
     ParserError, ParserTimeoutError, ParserUnavailableError,
     ParserBlockedError, ParserEmptyResultError, ApifyAPIError
@@ -25,52 +25,29 @@ class AvitoApifyParser:
     ]
     
     REGION_MAP = {
-        "moscow": "moskva",
-        "москва": "moskva",
-        "spb": "sankt-peterburg",
-        "санкт-петербург": "sankt-peterburg",
-        "новосибирск": "novosibirsk",
-        "екатеринбург": "ekaterinburg",
-        "казань": "kazan",
-        "нижний новгород": "nizhniy_novgorod",
-        "самара": "samara",
-        "ростов": "rostov-na-donu",
-        "краснодар": "krasnodar",
-        "воронеж": "voronezh",
-        "уфа": "ufa",
-        "челябинск": "chelyabinsk",
-        "омск": "omsk",
-        "пермь": "perm",
-        "волгоград": "volgograd",
-        "тюмень": "tyumen",
-        "красноярск": "krasnoyarsk",
-        "саратов": "saratov",
-        "владивосток": "vladivostok",
-        "ярославль": "yaroslavl",
-        "хабаровск": "khabarovsk",
-        "тольятти": "tolyatti",
-        "ижевск": "izhevsk",
-        "барнаул": "barnaul",
-        "ульяновск": "ulyanovsk",
-        "томск": "tomsk",
-        "рязань": "ryazan",
-        "кемерово": "kemerovo",
-        "пенза": "penza",
-        "астрахань": "astrakhan",
-        "липецк": "lipetsk",
-        "тула": "tula",
-        "киров": "kirov",
-        "чебоксары": "cheboksary",
-        "калининград": "kaliningrad",
-        "брянск": "bryansk",
-        "курск": "kursk",
-        "ставрополь": "stavropol",
-        "тверь": "tver",
-        "иваново": "ivanovo",
-        "белгород": "belgorod",
-        "архангельск": "arkhangelsk",
-        "сочи": "sochi",
-        "оренбург": "orenburg",
+        "moscow": "moskva", "москва": "moskva",
+        "spb": "sankt-peterburg", "санкт-петербург": "sankt-peterburg",
+        "новосибирск": "novosibirsk", "екатеринбург": "ekaterinburg",
+        "казань": "kazan", "нижний новгород": "nizhniy_novgorod",
+        "самара": "samara", "ростов": "rostov-na-donu",
+        "краснодар": "krasnodar", "воронеж": "voronezh",
+        "уфа": "ufa", "челябинск": "chelyabinsk",
+        "омск": "omsk", "пермь": "perm",
+        "волгоград": "volgograd", "тюмень": "tyumen",
+        "красноярск": "krasnoyarsk", "саратов": "saratov",
+        "владивосток": "vladivostok", "ярославль": "yaroslavl",
+        "хабаровск": "khabarovsk", "тольятти": "tolyatti",
+        "ижевск": "izhevsk", "барнаул": "barnaul",
+        "ульяновск": "ulyanovsk", "томск": "tomsk",
+        "рязань": "ryazan", "кемерово": "kemerovo",
+        "пенза": "penza", "астрахань": "astrakhan",
+        "липецк": "lipetsk", "тула": "tula",
+        "киров": "kirov", "чебоксары": "cheboksary",
+        "калининград": "kaliningrad", "брянск": "bryansk",
+        "курск": "kursk", "ставрополь": "stavropol",
+        "тверь": "tver", "иваново": "ivanovo",
+        "белгород": "belgorod", "архангельск": "arkhangelsk",
+        "сочи": "sochi", "оренбург": "orenburg",
     }
     
     async def parse_search(self, params: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -118,10 +95,6 @@ class AvitoApifyParser:
             logger.info(f"✅ После трансформации: {len(listings)} объявлений")
             return listings
             
-        except httpx.TimeoutException as e:
-            raise ParserTimeoutError("Apify request timeout", str(e))
-        except httpx.ConnectError as e:
-            raise ParserUnavailableError("Cannot connect to Apify", str(e))
         except (ParserTimeoutError, ParserUnavailableError, 
                 ParserBlockedError, ParserEmptyResultError, ApifyAPIError):
             raise
@@ -132,98 +105,103 @@ class AvitoApifyParser:
     async def _start_actor_run(self, url: str) -> str:
         """Запускаем актор на выполнение"""
         
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            for actor_id in self.ACTORS:
-                logger.info(f"🚀 Пробуем актор: {actor_id}")
-                
-                run_input = {
-                    "startUrls": [{"url": url}],
-                    "crawlerType": "playwright:firefox",
-                    "maxCrawlDepth": 0,
-                    "maxCrawlPages": 1,
-                    "maxResults": 50,
-                    "waitUntil": {"event": "networkidle", "timeout": 30000},
-                }
-                
-                try:
-                    response = await client.post(
-                        f"https://api.apify.com/v2/acts/{actor_id}/runs",
-                        params={"token": settings.APIFY_TOKEN},
-                        json=run_input
-                    )
-                    
-                    logger.info(f"📡 {actor_id}: статус {response.status_code}")
-                    
-                    if response.status_code == 201:
-                        data = response.json()
-                        run_id = data["data"]["id"]
-                        logger.info(f"✅ Актор {actor_id} запущен: {run_id}")
-                        return run_id
-                    
-                    logger.warning(f"❌ {actor_id}: {response.status_code}")
-                    
-                except Exception as e:
-                    logger.warning(f"❌ Ошибка при запуске {actor_id}: {e}")
-                    continue
+        client = get_http_client()
+        
+        for actor_id in self.ACTORS:
+            logger.info(f"🚀 Пробуем актор: {actor_id}")
             
-            return ""
+            run_input = {
+                "startUrls": [{"url": url}],
+                "crawlerType": "playwright:firefox",
+                "maxCrawlDepth": 0,
+                "maxCrawlPages": 1,
+                "maxResults": 50,
+                "waitUntil": {"event": "networkidle", "timeout": 30000},
+            }
+            
+            try:
+                response = await client.post(
+                    f"https://api.apify.com/v2/acts/{actor_id}/runs",
+                    params={"token": settings.APIFY_TOKEN},
+                    json=run_input
+                )
+                
+                logger.info(f"📡 {actor_id}: статус {response.status_code}")
+                
+                if response.status_code == 201:
+                    data = response.json()
+                    run_id = data["data"]["id"]
+                    logger.info(f"✅ Актор {actor_id} запущен: {run_id}")
+                    return run_id
+                
+                logger.warning(f"❌ {actor_id}: {response.status_code}")
+                
+            except Exception as e:
+                logger.warning(f"❌ Ошибка при запуске {actor_id}: {e}")
+                continue
+        
+        return ""
     
     async def _wait_for_result(self, run_id: str, max_wait: int = 180) -> List[Dict]:
         """Ждём завершения выполнения актора"""
         
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            for i in range(max_wait // 3):
-                try:
-                    response = await client.get(
-                        f"https://api.apify.com/v2/actor-runs/{run_id}",
-                        params={"token": settings.APIFY_TOKEN}
-                    )
-                    
-                    if response.status_code != 200:
-                        return []
-                    
-                    data = response.json()
-                    status = data["data"]["status"]
-                    
-                    if status == "SUCCEEDED":
-                        dataset_id = data["data"]["defaultDatasetId"]
-                        logger.info(f"✅ Актор завершён. Dataset: {dataset_id}")
-                        return await self._get_dataset_items(dataset_id)
-                    
-                    if status in ["FAILED", "ABORTED", "TIMED-OUT"]:
-                        logger.error(f"❌ Актор завершился с ошибкой: {status}")
-                        return []
-                    
-                    logger.info(f"⏳ Статус: {status}, ждём... ({i*3}с)")
-                    await asyncio.sleep(3)
-                    
-                except httpx.TimeoutException:
-                    continue
-            
-            raise ParserTimeoutError(
-                "Actor execution timeout",
-                f"Actor {run_id} did not complete in {max_wait} seconds"
-            )
+        client = get_http_client()
+        
+        for i in range(max_wait // 3):
+            try:
+                response = await client.get(
+                    f"https://api.apify.com/v2/actor-runs/{run_id}",
+                    params={"token": settings.APIFY_TOKEN}
+                )
+                
+                if response.status_code != 200:
+                    return []
+                
+                data = response.json()
+                status = data["data"]["status"]
+                
+                if status == "SUCCEEDED":
+                    dataset_id = data["data"]["defaultDatasetId"]
+                    logger.info(f"✅ Актор завершён. Dataset: {dataset_id}")
+                    return await self._get_dataset_items(dataset_id)
+                
+                if status in ["FAILED", "ABORTED", "TIMED-OUT"]:
+                    logger.error(f"❌ Актор завершился с ошибкой: {status}")
+                    return []
+                
+                logger.info(f"⏳ Статус: {status}, ждём... ({i*3}с)")
+                await asyncio.sleep(3)
+                
+            except Exception as e:
+                logger.warning(f"⏱️ Ошибка при проверке статуса: {e}")
+                await asyncio.sleep(3)
+                continue
+        
+        raise ParserTimeoutError(
+            "Actor execution timeout",
+            f"Actor {run_id} did not complete in {max_wait} seconds"
+        )
     
     async def _get_dataset_items(self, dataset_id: str) -> List[Dict]:
         """Получаем элементы из датасета"""
         
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.get(
-                f"https://api.apify.com/v2/datasets/{dataset_id}/items",
-                params={
-                    "token": settings.APIFY_TOKEN,
-                    "format": "json",
-                    "limit": 50
-                }
-            )
-            
-            if response.status_code == 200:
-                items = response.json()
-                logger.info(f"📦 Получено {len(items)} элементов из датасета")
-                return items
-            
-            return []
+        client = get_http_client()
+        
+        response = await client.get(
+            f"https://api.apify.com/v2/datasets/{dataset_id}/items",
+            params={
+                "token": settings.APIFY_TOKEN,
+                "format": "json",
+                "limit": 50
+            }
+        )
+        
+        if response.status_code == 200:
+            items = response.json()
+            logger.info(f"📦 Получено {len(items)} элементов из датасета")
+            return items
+        
+        return []
     
     def _transform_results(self, items: List[Dict]) -> List[Dict[str, Any]]:
         """Преобразуем результаты Apify в наш формат"""
@@ -239,14 +217,12 @@ class AvitoApifyParser:
                     logger.warning(f"⚠️ Страница вернула статус {http_status}")
                     continue
                 
-                # Метод 1: JSON-LD
                 jsonld_listings = self._extract_from_jsonld(item)
                 if jsonld_listings:
                     logger.info(f"🎯 Извлечено {len(jsonld_listings)} объявлений из JSON-LD")
                     all_listings.extend(jsonld_listings)
                     continue
                 
-                # Метод 2: Markdown
                 markdown_listings = self._extract_from_markdown(item)
                 if markdown_listings:
                     logger.info(f"📝 Извлечено {len(markdown_listings)} объявлений из markdown")
