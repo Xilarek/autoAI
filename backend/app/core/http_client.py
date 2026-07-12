@@ -7,7 +7,6 @@ from app.core.logger import setup_logger
 logger = setup_logger(__name__)
 
 # Глобальный HTTP клиент с connection pooling
-# Переиспользуется между запросами — экономит время на TLS handshake
 _http_client: Optional[httpx.AsyncClient] = None
 
 
@@ -19,19 +18,38 @@ def get_http_client() -> httpx.AsyncClient:
         _http_client = httpx.AsyncClient(
             timeout=httpx.Timeout(60.0, connect=10.0),
             limits=httpx.Limits(
-                max_connections=100,       # Макс соединений в пуле
-                max_keepalive_connections=20,  # Keep-alive соединений
-                keepalive_expiry=30,       # TTL keep-alive (сек)
+                max_connections=100,
+                max_keepalive_connections=20,
+                keepalive_expiry=30,
             ),
-            http2=False,  # Можно включить http2 для Apify
+            http2=False,
         )
         logger.info("🌐 Создан HTTP клиент с connection pooling")
     
     return _http_client
 
 
+def create_fresh_http_client() -> httpx.AsyncClient:
+    """
+    Создать НОВЫЙ HTTP клиент (не глобальный).
+    
+    Используется в Celery задачах, где event loop может быть закрыт.
+    """
+    client = httpx.AsyncClient(
+        timeout=httpx.Timeout(60.0, connect=10.0),
+        limits=httpx.Limits(
+            max_connections=100,
+            max_keepalive_connections=20,
+            keepalive_expiry=30,
+        ),
+        http2=False,
+    )
+    logger.info("🌐 Создан НОВЫЙ HTTP клиент для Celery задачи")
+    return client
+
+
 async def close_http_client():
-    """Закрыть HTTP клиент (вызывается при shutdown)"""
+    """Закрыть глобальный HTTP клиент"""
     global _http_client
     
     if _http_client is not None and not _http_client.is_closed:
@@ -47,5 +65,4 @@ class HTTPClientContext:
         return get_http_client()
     
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        # Не закрываем глобальный клиент — он переиспользуется
         pass

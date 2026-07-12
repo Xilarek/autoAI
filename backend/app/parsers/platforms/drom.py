@@ -11,7 +11,7 @@
 from typing import Dict, Any, Optional
 import re
 from app.parsers.base import BaseApifyParser
-from app.parsers.registry import register_parser  # ← импортируем из registry, не из parsers
+from app.parsers.registry import register_parser
 from app.core.logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -23,10 +23,10 @@ class DromParser(BaseApifyParser):
     
     PLATFORM = "drom"
     
+    # Оставляем только website-content-crawler (он точно работает)
+    # web-scraper и cheerio-scraper требуют одобрения в Apify Console
     ACTORS = [
         "apify~website-content-crawler",
-        "apify~web-scraper",
-        "apify~cheerio-scraper",
     ]
     
     # Маппинг регионов: русское название → slug в URL

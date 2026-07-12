@@ -23,12 +23,13 @@ import hashlib
 import json
 import asyncio
 import re
+import httpx
 from app.core.logger import setup_logger
 from app.core.config import settings
-from app.core.http_client import get_http_client
+from app.core.http_client import get_http_client, create_fresh_http_client
 from app.core.exceptions import (
     ParserError, ParserTimeoutError, ParserUnavailableError,
-    ParserEmptyResultError
+    ParserEmptyResultError, ParserBlockedError
 )
 
 logger = setup_logger(__name__)
@@ -47,13 +48,13 @@ class BaseApifyParser(ABC):
     ACTORS: List[str] = []
     REGION_MAP: Dict[str, str] = {}
     
-    # 🔧 Настройки по умолчанию (можно переопределить в наследниках)
+    # 🔧 Настройки по умолчанию
     DEFAULT_ACTOR = "apify~website-content-crawler"
     MAX_WAIT_SECONDS = 180
     MAX_RESULTS = 50
     
     # ============================================
-    # АБСТРАКТНЫЕ МЕТОДЫ (обязательны для наследников)
+    # АБСТРАКТНЫЕ МЕТОДЫ
     # ============================================
     
     @abstractmethod
@@ -63,22 +64,21 @@ class BaseApifyParser(ABC):
     
     @abstractmethod
     def _transform_listing(self, raw_data: Dict) -> Optional[Dict[str, Any]]:
-        """
-        Преобразовать сырые данные в наш формат.
-        
-        raw_data может содержать:
-        - source: "jsonld" | "markdown"
-        - Для jsonld: name, price, url
-        - Для markdown: text, url
-        """
+        """Преобразовать сырые данные в наш формат"""
         pass
     
     # ============================================
-    # ГЛАВНЫЙ МЕТОД (не переопределяется)
+    # ГЛАВНЫЙ МЕТОД
     # ============================================
     
-    async def parse_search(self, params: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Главный метод — парсинг через Apify"""
+    async def parse_search(self, params: Dict[str, Any], use_fresh_client: bool = False) -> List[Dict[str, Any]]:
+        """
+        Главный метод — парсинг через Apify.
+        
+        Args:
+            params: Параметры поиска
+            use_fresh_client: Если True, создать новый HTTP клиент (для Celery)
+        """
         
         if not settings.APIFY_TOKEN:
             raise ParserUnavailableError(
@@ -89,8 +89,13 @@ class BaseApifyParser(ABC):
         search_url = self._build_search_url(params)
         logger.info(f"🔗 [{self.PLATFORM}] Парсинг: {search_url}")
         
+        # Создаём HTTP клиент
+        client = create_fresh_http_client() if use_fresh_client else get_http_client()
+        client_type = "НОВЫЙ" if use_fresh_client else "глобальный"
+        logger.info(f"🌐 [{self.PLATFORM}] Используем {client_type} HTTP клиент")
+        
         try:
-            run_id = await self._start_actor_run(search_url)
+            run_id = await self._start_actor_run(search_url, client)
             
             if not run_id:
                 raise ParserUnavailableError(
@@ -98,7 +103,7 @@ class BaseApifyParser(ABC):
                     "All actors returned errors"
                 )
             
-            result = await self._wait_for_result(run_id)
+            result = await self._wait_for_result(run_id, client)
             
             if not result:
                 raise ParserEmptyResultError(
@@ -125,20 +130,23 @@ class BaseApifyParser(ABC):
             return listings
             
         except (ParserTimeoutError, ParserUnavailableError, 
-                ParserEmptyResultError):
+                ParserEmptyResultError, ParserBlockedError):
             raise
         except Exception as e:
             logger.error(f"❌ [{self.PLATFORM}] Неизвестная ошибка: {e}", exc_info=True)
             raise ParserError(f"Unexpected {self.PLATFORM} parser error", str(e))
+        finally:
+            # Закрываем клиент, если он был создан для этой задачи
+            if use_fresh_client and not client.is_closed:
+                await client.aclose()
+                logger.info(f"🔒 [{self.PLATFORM}] HTTP клиент закрыт")
     
     # ============================================
     # ОБЩАЯ ЛОГИКА: Apify API
     # ============================================
     
-    async def _start_actor_run(self, url: str) -> str:
-        """Запустить Apify актор (общая логика для всех площадок)"""
-        
-        client = get_http_client()
+    async def _start_actor_run(self, url: str, client: httpx.AsyncClient) -> str:
+        """Запустить Apify актор"""
         
         for actor_id in self.ACTORS:
             logger.info(f"🚀 [{self.PLATFORM}] Пробуем актор: {actor_id}")
@@ -160,6 +168,11 @@ class BaseApifyParser(ABC):
                     logger.info(f"✅ [{self.PLATFORM}] Актор запущен: {run_id}")
                     return run_id
                 
+                # Если 403 — актор требует одобрения, пропускаем
+                if response.status_code == 403:
+                    logger.warning(f"⚠️ [{self.PLATFORM}] {actor_id}: 403 — требует одобрения в Apify Console")
+                    continue
+                
                 logger.warning(f"❌ [{self.PLATFORM}] {actor_id}: {response.status_code} - {response.text[:300]}")
                 
             except Exception as e:
@@ -170,7 +183,7 @@ class BaseApifyParser(ABC):
         return ""
     
     def _build_actor_input(self, url: str) -> Dict[str, Any]:
-        """Построить input для Apify актора (можно переопределить)"""
+        """Построить input для Apify актора"""
         return {
             "startUrls": [{"url": url}],
             "crawlerType": "playwright:firefox",
@@ -180,10 +193,8 @@ class BaseApifyParser(ABC):
             "waitUntil": {"event": "networkidle", "timeout": 30000},
         }
     
-    async def _wait_for_result(self, run_id: str) -> List[Dict]:
-        """Ждать результат выполнения актора (общая логика)"""
-        
-        client = get_http_client()
+    async def _wait_for_result(self, run_id: str, client: httpx.AsyncClient) -> List[Dict]:
+        """Ждать результат выполнения актора"""
         
         for i in range(self.MAX_WAIT_SECONDS // 3):
             try:
@@ -202,7 +213,7 @@ class BaseApifyParser(ABC):
                 if status == "SUCCEEDED":
                     dataset_id = data["data"]["defaultDatasetId"]
                     logger.info(f"✅ [{self.PLATFORM}] Актор завершён. Dataset: {dataset_id}")
-                    return await self._get_dataset_items(dataset_id)
+                    return await self._get_dataset_items(dataset_id, client)
                 
                 if status in ["FAILED", "ABORTED", "TIMED-OUT"]:
                     logger.error(f"❌ [{self.PLATFORM}] Актор завершился с ошибкой: {status}")
@@ -224,10 +235,8 @@ class BaseApifyParser(ABC):
             f"Actor {run_id} did not complete in {self.MAX_WAIT_SECONDS} seconds"
         )
     
-    async def _get_dataset_items(self, dataset_id: str) -> List[Dict]:
-        """Получить элементы из датасета (общая логика)"""
-        
-        client = get_http_client()
+    async def _get_dataset_items(self, dataset_id: str, client: httpx.AsyncClient) -> List[Dict]:
+        """Получить элементы из датасета"""
         
         response = await client.get(
             f"https://api.apify.com/v2/datasets/{dataset_id}/items",
@@ -251,7 +260,7 @@ class BaseApifyParser(ABC):
     # ============================================
     
     def _extract_listings(self, items: List[Dict]) -> List[Dict[str, Any]]:
-        """Извлечь объявления из сырых данных Apify (общая логика)"""
+        """Извлечь объявления из сырых данных Apify"""
         
         all_listings = []
         
@@ -292,7 +301,7 @@ class BaseApifyParser(ABC):
         return all_listings
     
     def _extract_from_jsonld(self, item: Dict) -> List[Dict[str, Any]]:
-        """Извлечь объявления из JSON-LD метаданных (общая логика)"""
+        """Извлечь объявления из JSON-LD метаданных"""
         
         metadata = item.get("metadata", {})
         jsonld = metadata.get("jsonLd", [])
@@ -345,7 +354,7 @@ class BaseApifyParser(ABC):
         return self._transform_listing(raw_data)
     
     def _extract_from_markdown(self, item: Dict) -> List[Dict[str, Any]]:
-        """Извлечь объявления из markdown (общая логика, fallback)"""
+        """Извлечь объявления из markdown (fallback)"""
         
         content = item.get("markdown") or item.get("text") or ""
         url = item.get("url", "")
@@ -379,11 +388,11 @@ class BaseApifyParser(ABC):
         return listings
     
     # ============================================
-    # УТИЛИТЫ (общие для всех площадок)
+    # УТИЛИТЫ
     # ============================================
     
     def _generate_external_id(self, url: str, **kwargs) -> str:
-        """Генерация детерминированного ID (общая логика)"""
+        """Генерация детерминированного ID"""
         if url:
             hash_value = hashlib.md5(url.encode()).hexdigest()[:12]
             return f"{self.PLATFORM}_{hash_value}"
@@ -393,7 +402,7 @@ class BaseApifyParser(ABC):
         return f"{self.PLATFORM}_{hash_value}"
     
     def _parse_title(self, title: str) -> tuple:
-        """Парсить название 'Brand Model, Year' (общая логика)"""
+        """Парсить название 'Brand Model, Year'"""
         match = re.match(r'^([A-Za-zА-Яа-я]+)\s+([A-Za-zА-Яа-я0-9]+)(?:,\s*(\d{4}))?', title)
         
         if match:
@@ -409,7 +418,7 @@ class BaseApifyParser(ABC):
         return "", "", 0
     
     def _extract_region_from_url(self, url: str, pattern: str) -> str:
-        """Извлечь регион из URL (общая логика)"""
+        """Извлечь регион из URL"""
         match = re.search(pattern, url)
         if match:
             region_slug = match.group(1)
@@ -420,21 +429,21 @@ class BaseApifyParser(ABC):
         return ""
     
     def _extract_price_from_text(self, text: str) -> int:
-        """Извлечь цену из текста (общая логика)"""
+        """Извлечь цену из текста"""
         match = re.search(r'(\d{1,3}(?:[\s\xa0]\d{3})+)\s*₽', text)
         if match:
             return int(match.group(1).replace('\xa0', '').replace(' ', ''))
         return 0
     
     def _extract_mileage_from_text(self, text: str) -> int:
-        """Извлечь пробег из текста (общая логика)"""
+        """Извлечь пробег из текста"""
         match = re.search(r'(\d{1,3}(?:[\s\xa0]\d{3})*)\s*км', text)
         if match:
             return int(match.group(1).replace('\xa0', '').replace(' ', ''))
         return 0
     
     def _extract_fuel_from_text(self, text: str) -> str:
-        """Извлечь тип топлива из текста (общая логика)"""
+        """Извлечь тип топлива из текста"""
         text_lower = text.lower()
         if "бензин" in text_lower:
             return "бензин"
@@ -447,7 +456,7 @@ class BaseApifyParser(ABC):
         return ""
     
     def _extract_transmission_from_text(self, text: str) -> str:
-        """Извлечь тип КПП из текста (общая логика)"""
+        """Извлечь тип КПП из текста"""
         text_lower = text.lower()
         if "автомат" in text_lower or "акпп" in text_lower:
             return "автомат"
@@ -460,7 +469,7 @@ class BaseApifyParser(ABC):
         return ""
     
     def _extract_engine_from_text(self, text: str) -> float:
-        """Извлечь объём двигателя из текста (общая логика)"""
+        """Извлечь объём двигателя из текста"""
         match = re.search(r'(\d+\.?\d*)\s*л', text)
         if match:
             return float(match.group(1))
