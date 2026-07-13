@@ -9,24 +9,24 @@ export function CallToAction() {
   const router = useRouter()
 
   return (
-    <Card className="bg-gradient-to-r from-blue-600 to-purple-600 text-white border-0">
-      <CardContent className="pt-8 pb-8">
-        <div className="text-center space-y-4">
+    <Card className="border-0 bg-gradient-to-r from-blue-600 to-purple-600 text-white">
+      <CardContent className="pb-8 pt-8">
+        <div className="space-y-4 text-center">
           <h2 className="text-2xl font-bold">Готовы найти свой идеальный автомобиль?</h2>
           <p className="text-blue-100">Запустите поиск и получите умный анализ</p>
-          <div className="flex gap-4 justify-center pt-4">
-            <BaseButton 
-              size="lg" 
-              variant="secondary" 
+          <div className="flex justify-center gap-4 pt-4">
+            <BaseButton
+              size="lg"
+              variant="secondary"
               onClick={() => router.push("/search")}
               icon={<Search className="h-5 w-5" />}
             >
               Запустить поиск
             </BaseButton>
-            <BaseButton 
-              size="lg" 
-              variant="outline" 
-              className="border-white text-black hover:bg-white hover:text-blue-600 transition-colors"
+            <BaseButton
+              size="lg"
+              variant="outline"
+              className="border-white text-black transition-colors hover:bg-white hover:text-blue-600"
               onClick={() => router.push("/listings")}
               icon={<ExternalLink className="h-5 w-5" />}
             >

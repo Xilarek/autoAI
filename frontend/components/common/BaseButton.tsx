@@ -19,26 +19,22 @@ export interface BaseButtonProps extends ButtonProps {
   fullWidth?: boolean
 }
 
-export function BaseButton({ 
-  children, 
-  loading = false, 
-  icon, 
+export function BaseButton({
+  children,
+  loading = false,
+  icon,
   iconRight,
   fullWidth = false,
   className,
-  ...props 
+  ...props
 }: BaseButtonProps) {
   return (
     <Button
-      className={cn(
-        "cursor-pointer transition-all duration-200",
-        fullWidth && "w-full",
-        className
-      )}
+      className={cn("cursor-pointer transition-all duration-200", fullWidth && "w-full", className)}
       disabled={props.disabled || loading}
       {...props}
     >
-      {loading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+      {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
       {!loading && icon && <span className="mr-2">{icon}</span>}
       {children}
       {!loading && iconRight && <span className="ml-2">{iconRight}</span>}

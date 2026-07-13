@@ -1,8 +1,16 @@
-export const VERDICT_CONFIG: Record<string, { label: string; color: string; bg: string; icon: string }> = {
-  "ЗВОНИТЬ": { label: "ЗВОНИТЬ", color: "text-green-600", bg: "bg-green-100", icon: "Phone" },
-  "ТОРГОВАТЬСЯ": { label: "ТОРГОВАТЬСЯ", color: "text-blue-600", bg: "bg-blue-100", icon: "MessageCircle" },
-  "ДУМАТЬ": { label: "ДУМАТЬ", color: "text-yellow-600", bg: "bg-yellow-100", icon: "Brain" },
-  "БЕЖАТЬ": { label: "БЕЖАТЬ", color: "text-red-600", bg: "bg-red-100", icon: "AlertTriangle" },
+export const VERDICT_CONFIG: Record<
+  string,
+  { label: string; color: string; bg: string; icon: string }
+> = {
+  ЗВОНИТЬ: { label: "ЗВОНИТЬ", color: "text-green-600", bg: "bg-green-100", icon: "Phone" },
+  ТОРГОВАТЬСЯ: {
+    label: "ТОРГОВАТЬСЯ",
+    color: "text-blue-600",
+    bg: "bg-blue-100",
+    icon: "MessageCircle",
+  },
+  ДУМАТЬ: { label: "ДУМАТЬ", color: "text-yellow-600", bg: "bg-yellow-100", icon: "Brain" },
+  БЕЖАТЬ: { label: "БЕЖАТЬ", color: "text-red-600", bg: "bg-red-100", icon: "AlertTriangle" },
 }
 
 export const PLATFORMS = {

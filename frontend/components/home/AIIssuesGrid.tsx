@@ -13,11 +13,11 @@ const issues = [
 export function AIIssuesGrid() {
   return (
     <div className="space-y-4">
-      <h2 className="text-2xl font-bold text-center">Что находит наш AI?</h2>
+      <h2 className="text-center text-2xl font-bold">Что находит наш AI?</h2>
       <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
         {issues.map((issue, index) => {
           const Icon = issue.icon
-          
+
           return (
             <Card key={index} className="border-gray-200">
               <CardContent className="pt-4">

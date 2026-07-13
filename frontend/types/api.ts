@@ -25,6 +25,17 @@ export interface ReportsResponse {
   reports: ListingOut[]
 }
 
+export interface ReportsParams {
+  skip?: number
+  limit?: number
+  verdict?: string
+  brand?: string
+  model?: string
+  region?: string
+  sort_by?: "price" | "year" | "created_at"
+  sort_order?: "asc" | "desc"
+}
+
 export interface ParseResponse {
   status: "queued" | "running" | "completed" | "failed"
   task_id: string

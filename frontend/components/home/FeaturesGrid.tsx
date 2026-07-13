@@ -55,11 +55,11 @@ export function FeaturesGrid() {
       {features.map((feature, index) => {
         const colors = colorMap[feature.color]
         const Icon = feature.icon
-        
+
         return (
           <Card key={index} className={`${colors.border} ${colors.bg}`}>
             <CardHeader>
-              <div className="flex items-center gap-3 mb-2">
+              <div className="mb-2 flex items-center gap-3">
                 <div className={`p-2 ${colors.iconBg} rounded-lg`}>
                   <Icon className="h-6 w-6 text-white" />
                 </div>

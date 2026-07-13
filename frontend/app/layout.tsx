@@ -10,30 +10,30 @@ export const metadata: Metadata = {
   description: "AI-анализ объявлений, проверка рисков и рыночных цен",
 }
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="ru">
       <body className={inter.className}>
         <QueryProvider>
           <div className="min-h-screen bg-gray-50">
             <header className="border-b bg-white">
-              <div className="container mx-auto px-4 py-4 flex items-center justify-between">
+              <div className="container mx-auto flex items-center justify-between px-4 py-4">
                 <h1 className="text-xl font-bold text-gray-900">🚗 AutoAI</h1>
                 <nav className="flex gap-4">
-                  <a href="/listings" className="text-gray-600 hover:text-blue-600">Объявления</a>
-                  <a href="/search" className="text-gray-600 hover:text-blue-600">Поиск</a>
-                  <a href="/tasks" className="text-gray-600 hover:text-blue-600">Задачи</a>
+                  <a href="/listings" className="text-gray-600 hover:text-blue-600">
+                    Объявления
+                  </a>
+                  <a href="/search" className="text-gray-600 hover:text-blue-600">
+                    Поиск
+                  </a>
+                  <a href="/tasks" className="text-gray-600 hover:text-blue-600">
+                    Задачи
+                  </a>
                 </nav>
               </div>
             </header>
-            <main className="container mx-auto px-4 py-6">
-              {children}
-            </main>
-            <footer className="border-t mt-12 py-6 text-center text-gray-500 text-sm">
+            <main className="container mx-auto px-4 py-6">{children}</main>
+            <footer className="mt-12 border-t py-6 text-center text-sm text-gray-500">
               © {new Date().getFullYear()} AutoAI. Backend: FastAPI + Celery. Frontend: Next.js 14
             </footer>
           </div>
