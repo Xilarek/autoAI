@@ -61,6 +61,7 @@ class DromRealParser:
                     logger.error(f"ScraperAPI вернул статус {response.status_code}")
                     return []
                 
+                response.encoding = "utf-8" 
                 html = response.text
                 
                 with open("/tmp/drom_scraperapi_debug.html", "w", encoding="utf-8") as f:

@@ -248,6 +248,7 @@ class BaseApifyParser(ABC):
         )
         
         if response.status_code == 200:
+            response.encoding = "utf-8"
             items = response.json()
             logger.info(f"📦 [{self.PLATFORM}] Получено {len(items)} элементов из датасета")
             return items
