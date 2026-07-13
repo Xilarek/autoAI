@@ -1,4 +1,5 @@
 import axios from "axios"
+import { toast } from "sonner"
 
 export const apiClient = axios.create({
   baseURL: "/api/v1",
@@ -9,12 +10,11 @@ export const apiClient = axios.create({
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.code === "ECONNABORTED") {
-      console.error("⏱️ Превышено время ожидания ответа от сервера")
-    } else if (error.response) {
-      console.error(`❌ Ошибка API: ${error.response.status}`)
+    if (error.response) {
+      const message = error.response.data?.detail || "Произошла ошибка сервера"
+      toast.error(message)
     } else {
-      console.error("🌐 Ошибка сети")
+      toast.error("Ошибка сети. Проверьте интернет.")
     }
     return Promise.reject(error)
   }
