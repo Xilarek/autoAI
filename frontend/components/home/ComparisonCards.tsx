@@ -1,7 +1,7 @@
 "use client"
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { BaseButton } from "@/components/common/BaseButton"
+import { BaseButton } from "@/components/shared/buttons/BaseButton"
 import {
   CheckCircle2,
   AlertTriangle,

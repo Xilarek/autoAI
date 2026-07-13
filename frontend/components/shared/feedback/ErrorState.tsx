@@ -1,6 +1,6 @@
 "use client"
 
-import { BaseButton } from "@/components/common/BaseButton"
+import { BaseButton } from "@/components/shared/buttons/BaseButton"
 import { AlertTriangle, RefreshCw } from "lucide-react"
 
 interface ErrorStateProps {

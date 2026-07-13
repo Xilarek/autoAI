@@ -14,7 +14,6 @@ export interface ListingOut {
   risks?: string[]
   url?: string
   source?: "drom" | "avito" | "auto_ru"
-  photos?: string[]
   created_at?: string
 }
 

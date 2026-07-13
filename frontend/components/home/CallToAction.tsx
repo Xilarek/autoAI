@@ -1,7 +1,7 @@
 "use client"
 
 import { Card, CardContent } from "@/components/ui/card"
-import { BaseButton } from "@/components/common/BaseButton"
+import { BaseButton } from "@/components/shared/buttons/BaseButton"
 import { Search, ExternalLink } from "lucide-react"
 import { useRouter } from "next/navigation"
 

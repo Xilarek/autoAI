@@ -1,9 +1,9 @@
 "use client"
 
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
-import { BaseButton } from "@/components/common/BaseButton"
-import { OptimizedImage } from "@/components/common/OptimizedImage"
-import { VerdictBadge } from "@/components/common/VerdictBadge"
+import { BaseButton } from "@/components/shared/buttons/BaseButton"
+import { OptimizedImage } from "@/components/shared/media/OptimizedImage"
+import { VerdictBadge } from "@/components/features/ai/VerdictBadge"
 import { formatPrice } from "@/lib/utils"
 import { ExternalLink, MapPin, Gauge } from "lucide-react"
 import { useRouter } from "next/navigation"

@@ -1,6 +1,6 @@
 "use client"
 
-import { BaseButton } from "@/components/common/BaseButton"
+import { BaseButton } from "@/components/shared/buttons/BaseButton"
 import { Search, TrendingUp, Zap } from "lucide-react"
 import { useRouter } from "next/navigation"
 
