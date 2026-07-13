@@ -13,20 +13,23 @@ interface OptimizedImageProps {
   height?: number
 }
 
-export function OptimizedImage({ 
-  src, 
-  alt, 
-  className = "rounded-lg", 
+export function OptimizedImage({
+  src,
+  alt,
+  className = "rounded-lg",
   fill = false,
   width = 400,
-  height = 300
+  height = 300,
 }: OptimizedImageProps) {
   const [hasError, setHasError] = useState(false)
 
   // Если картинки нет или она не загрузилась, показываем заглушку
   if (!src || hasError) {
     return (
-      <div className={`bg-gray-100 flex items-center justify-center ${fill ? "w-full h-full" : ""}`} style={fill ? {} : { width, height }}>
+      <div
+        className={`flex items-center justify-center bg-gray-100 ${fill ? "h-full w-full" : ""}`}
+        style={fill ? {} : { width, height }}
+      >
         <ImageIcon className="h-12 w-12 text-gray-300" />
       </div>
     )

@@ -13,15 +13,22 @@ const nextConfig = {
     remotePatterns: [
       // Дром
       { protocol: "https", hostname: "auto.drom.ru" },
-      { protocol: "https", hostname: "st.drom.ru" }, // часто фото хранятся на поддоменах st
+      { protocol: "https", hostname: "st.drom.ru" },
+      { protocol: "https", hostname: "avatars.mds.yandex.net" },
       // Авито
       { protocol: "https", hostname: "www.avito.ru" },
-      { protocol: "https", hostname: "avatars.mds.yandex.net" }, // Авито использует Яндекс.Картинки для заглушек/фото
+      { protocol: "https", hostname: "avito.ru" },
       // Auto.ru
       { protocol: "https", hostname: "auto.ru" },
       { protocol: "https", hostname: "www.auto.ru" },
-      { protocol: "https", hostname: "avatars.mds.yandex.net" }, // Auto.ru тоже использует Яндекс
+      // Для тестов (example.com)
+      { protocol: "https", hostname: "example.com" },
+      // Любой localhost для разработки
+      { protocol: "http", hostname: "localhost" },
+      { protocol: "https", hostname: "localhost" },
     ],
+    // Разрешаем неоптимизированные изображения (если бэкенд возвращает прямые ссылки)
+    unoptimized: false,
   },
 }
 

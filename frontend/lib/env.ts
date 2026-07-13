@@ -11,5 +11,5 @@ export const env = createEnv({
     NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL,
   },
   // Выдаст ошибку при сборке, если переменных нет
-  skipValidation: process.env.NODE_ENV === "development", 
+  skipValidation: process.env.NODE_ENV === "development",
 })

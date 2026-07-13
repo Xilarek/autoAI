@@ -3,7 +3,7 @@
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { BaseButton } from "@/components/shared/buttons/BaseButton"
 import { OptimizedImage } from "@/components/shared/media/OptimizedImage"
-import { VerdictBadge } from "@/components/features/ai"
+import { VerdictBadge } from "@/components/features/ai/VerdictBadge"
 import { formatPrice } from "@/lib/utils"
 import { ExternalLink, MapPin, Gauge } from "lucide-react"
 import { useRouter } from "next/navigation"
@@ -17,12 +17,7 @@ interface CarCardProps {
 export function CarCard({ car }: CarCardProps) {
   const router = useRouter()
 
-  // Обработчик клика по всей карточке
-  const handleCardClick = () => {
-    router.push(`/listings/${car.id}`)
-  }
-
-  // Обработчик клавиатуры для доступности (Enter или Пробел)
+  const handleCardClick = () => router.push(`/listings/${car.id}`)
   const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault()
@@ -30,31 +25,32 @@ export function CarCard({ car }: CarCardProps) {
     }
   }
 
-  // Безопасное получение первого фото
   const imageUrl = Array.isArray(car.photos) && car.photos.length > 0 ? car.photos[0] : null
+
+  // Используем новые имена полей с фоллбэком на старые (на всякий случай)
+  const price = car.price_rub || (car as any).price || 0
+  const marketPrice = car.fair_price || (car as any).market_price
+  const verdict = car.ai_verdict || (car as any).verdict
 
   return (
     <Card
-      className="group relative flex flex-col hover:shadow-lg transition-all duration-200 cursor-pointer border-gray-200 overflow-hidden focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-2 outline-none"
+      className="group relative flex cursor-pointer flex-col overflow-hidden border-gray-200 outline-none transition-all duration-200 focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-2 hover:shadow-lg"
       onClick={handleCardClick}
       onKeyDown={handleKeyDown}
       tabIndex={0}
       role="article"
-      aria-label={`Объявление: ${car.brand} ${car.model} ${car.year} года, цена ${formatPrice(car.price)}`}
+      aria-label={`Объявление: ${car.brand} ${car.model} ${car.year} года, цена ${formatPrice(price)}`}
     >
-      {/* Изображение */}
       <div className="relative h-48 w-full bg-gray-100">
         <OptimizedImage
           src={imageUrl}
           alt={`${car.brand} ${car.model} ${car.year} года выпуска`}
           fill
-          className="group-hover:scale-105 transition-transform duration-300"
+          className="transition-transform duration-300 group-hover:scale-105"
         />
-
-        {/* Бейдж вердикта AI */}
-        {car.verdict && (
-          <div className="absolute top-3 right-3">
-            <VerdictBadge verdict={car.verdict} />
+        {verdict && (
+          <div className="absolute right-3 top-3">
+            <VerdictBadge verdict={verdict} />
           </div>
         )}
       </div>
@@ -62,7 +58,7 @@ export function CarCard({ car }: CarCardProps) {
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
-            <h3 className="font-bold text-lg text-gray-900 group-hover:text-blue-600 transition-colors line-clamp-1">
+            <h3 className="line-clamp-1 text-lg font-bold text-gray-900 transition-colors group-hover:text-blue-600">
               {car.brand} {car.model}
             </h3>
             <p className="text-sm text-gray-500">
@@ -72,25 +68,23 @@ export function CarCard({ car }: CarCardProps) {
         </div>
       </CardHeader>
 
-      <CardContent className="space-y-4 flex-1 flex flex-col">
-        {/* Цена и рыночная цена */}
+      <CardContent className="flex flex-1 flex-col space-y-4">
         <div className="flex items-baseline gap-2">
-          <span className="text-2xl font-bold text-gray-900">{formatPrice(car.price)}</span>
-          {car.market_price && car.market_price !== car.price && (
-            <span 
-              className="text-sm text-gray-400 line-through" 
-              aria-label={`Рыночная цена: ${formatPrice(car.market_price)}`}
+          <span className="text-2xl font-bold text-gray-900">{formatPrice(price)}</span>
+          {marketPrice && marketPrice !== price && (
+            <span
+              className="text-sm text-gray-400 line-through"
+              aria-label={`Рыночная цена: ${formatPrice(marketPrice)}`}
             >
-              {formatPrice(car.market_price)}
+              {formatPrice(marketPrice)}
             </span>
           )}
         </div>
 
-        {/* Характеристики */}
         <div className="flex flex-wrap gap-3 text-sm text-gray-600">
           {car.mileage && (
-            <div 
-              className="flex items-center gap-1.5 bg-gray-50 px-2 py-1 rounded-md" 
+            <div
+              className="flex items-center gap-1.5 rounded-md bg-gray-50 px-2 py-1"
               aria-label={`Пробег: ${car.mileage.toLocaleString("ru-RU")} километров`}
             >
               <Gauge className="h-4 w-4 text-gray-500" aria-hidden="true" />
@@ -98,8 +92,8 @@ export function CarCard({ car }: CarCardProps) {
             </div>
           )}
           {car.region && (
-            <div 
-              className="flex items-center gap-1.5 bg-gray-50 px-2 py-1 rounded-md" 
+            <div
+              className="flex items-center gap-1.5 rounded-md bg-gray-50 px-2 py-1"
               aria-label={`Регион: ${car.region}`}
             >
               <MapPin className="h-4 w-4 text-gray-500" aria-hidden="true" />
@@ -108,8 +102,7 @@ export function CarCard({ car }: CarCardProps) {
           )}
         </div>
 
-        {/* Кнопки действий (прижаты к низу карточки) */}
-        <div className="pt-3 mt-auto border-t border-gray-100 flex gap-2">
+        <div className="mt-auto flex gap-2 border-t border-gray-100 pt-3">
           <BaseButton
             variant="outline"
             size="sm"
@@ -122,7 +115,6 @@ export function CarCard({ car }: CarCardProps) {
           >
             Подробнее
           </BaseButton>
-          
           {car.url && (
             <BaseButton
               variant="ghost"

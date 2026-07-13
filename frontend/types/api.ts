@@ -5,26 +5,28 @@ export interface ListingOut {
   brand: string
   model: string
   year: number
-  price: number
+  price_rub: number // Было price
+  fair_price?: number // Было market_price
   mileage?: number
   region?: string
-  market_price?: number
-  verdict?: Verdict
-  summary?: string
-  risks?: string[]
+  ai_verdict?: Verdict // Было verdict
+  ai_summary?: string // Было summary
+  ai_risks?: string[] // Было risks
   url?: string
-  source?: "drom" | "avito" | "auto_ru"
+  source?: "drom" | "avito" | "auto_ru" | string
   photos?: string[]
   created_at?: string
+  description?: string
+  engine_volume?: number
+  fuel_type?: string
+  transmission?: string
+  body_type?: string
 }
 
-export interface ReportsResponse {
-  count: number
-  total: number
-  page: number
-  per_page: number
-  reports: ListingOut[]
-}
+// Если бэкенд возвращает просто массив, используем его.
+// Если позже добавят пагинацию в виде объекта, мы это адаптируем.
+export type ReportsResponse =
+  ListingOut[] | { reports: ListingOut[]; total: number; per_page: number }
 
 export interface ReportsParams {
   skip?: number
@@ -33,7 +35,7 @@ export interface ReportsParams {
   brand?: string
   model?: string
   region?: string
-  sort_by?: "price" | "year" | "created_at"
+  sort_by?: "price_rub" | "year" | "created_at"
   sort_order?: "asc" | "desc"
 }
 

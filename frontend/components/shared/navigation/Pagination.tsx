@@ -13,7 +13,7 @@ export function Pagination({ currentPage, totalPages, isFetching, onPageChange }
   if (totalPages <= 1) return null
 
   return (
-    <div className="flex items-center justify-center gap-3 pt-6 border-t">
+    <div className="flex items-center justify-center gap-3 border-t pt-6">
       <BaseButton
         variant="outline"
         onClick={() => onPageChange(currentPage - 1)}
@@ -21,11 +21,11 @@ export function Pagination({ currentPage, totalPages, isFetching, onPageChange }
       >
         Назад
       </BaseButton>
-      
-      <span className="text-sm font-medium text-gray-600 px-4 min-w-[120px] text-center">
+
+      <span className="min-w-[120px] px-4 text-center text-sm font-medium text-gray-600">
         Страница {currentPage} из {totalPages}
       </span>
-      
+
       <BaseButton
         variant="outline"
         onClick={() => onPageChange(currentPage + 1)}
